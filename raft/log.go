@@ -47,26 +47,21 @@ type raftLog struct {
 
 func newLog(storage Storage) *raftLog {
 	if storage == nil {
-		storage = NewMemoryStorage()
+		panic("storage must not be nil")
+	}
+	log := &raftLog{
+		storage: storage,
 	}
 	lastIndex, err := storage.GetLastIndex()
-	if err != nil {
+	if err == ErrStorageEmpty {
+		// When starting from scratch populate the list with a dummy entry at term zero.
+		log.unstableEnts = make([]pb.Entry, 1)
+	} else if err == nil {
+		log.unstable = lastIndex + 1
+	} else {
 		panic(err) // TODO(bdarnell)
 	}
-	return &raftLog{
-		storage:  storage,
-		unstable: lastIndex + 1,
-	}
-}
-
-func (l *raftLog) load(ents []pb.Entry) {
-	// TODO(bdarnell): does this method need to support other Storage impls or does it go away?
-	ms := l.storage.(*MemoryStorage)
-	if ms.offset != ents[0].Index {
-		panic("entries loaded don't match offset index")
-	}
-	ms.ents = ents
-	l.unstable = ms.offset + uint64(len(ents))
+	return log
 }
 
 func (l *raftLog) String() string {
